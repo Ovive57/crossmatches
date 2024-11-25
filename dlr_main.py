@@ -37,8 +37,8 @@ import requests
 # Debugging
 import ipdb  # *ipdb.set_trace()
 
-filename_GAMA = "data/gkvScienceCatv02.fits"
-SN_df = pd.read_csv("data/tns_SNIa_20240424_copy.csv")
+filename_GAMA = "data_files/gkvScienceCatv02.fits"
+SN_df = pd.read_csv("data_files/tns_SNIa_20240424_copy.csv")
 
 outfilename = "test_script.csv"
 
