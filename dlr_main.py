@@ -21,8 +21,6 @@ from matplotlib.patches import Ellipse
 import matplotlib.image as mpimg
 import matplotlib.colors as mcolors
 
-import style
-
 # Astropy
 from astropy.table import Table
 from astropy import coordinates as co, units as u
