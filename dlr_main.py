@@ -73,7 +73,7 @@ if __name__ == "__main__":
     #    radius_deg=1 / 60,
     #    dDLR_cut=4,
     #    type_dlr="classic",
-    #    verbose=False,
+    #    verbose=True,
     #    overwrite=True,
     # )
 
@@ -87,6 +87,6 @@ if __name__ == "__main__":
         radius_deg=1 / 60,
         dDLR_cut=4,
         type_dlr="classic",
-        verbose=False,
+        verbose=True,
         overwrite=True,
     )

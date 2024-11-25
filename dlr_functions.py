@@ -105,8 +105,8 @@ def get_sn_angle(
     # To calculate the angle from the major axis, because of how angles move, instead of subtracting we add, they move in opposite directions.
     angle_from_major = position_angle + angle_from_ra
 
-    if verbose:
-        print(f"Angles from major axis: {angle_from_major}")
+    # if verbose:
+    #    print(f"Angles from major axis: {angle_from_major}")
     return angle_from_major
 
 
@@ -280,8 +280,8 @@ def table_galaxies_within_radius_Legacy(
         tblResult = result.to_table()
 
         if verbose:
-            print(f"querying legacy with a search radius of {radius_deg} deg.")
-            print(f"query result has {len(tblResult)} rows.")
+            print(f"querying legacy with a search radius of {radius_deg*60} arcmin.")
+            # print(f"query result has {len(tblResult)} rows.")
             if save:
                 print("writing query result to:", cat_filename)
         if save:
@@ -346,8 +346,8 @@ def get_dDLR_rotated(
 
     dDLR = np.sqrt((da / galaxy_major) ** 2.0 + (db / galaxy_minor) ** 2.0)
 
-    if verbose:
-        print(f"Rotated dDLR: {dDLR}")
+    # if verbose:
+    #    print(f"Rotated dDLR: {dDLR}")
 
     return dDLR
 
@@ -402,8 +402,8 @@ def get_dDLR_classic(
 
     dDLR = sep / DLR
 
-    if verbose:
-        print(f"Classic dDLR: {dDLR}")
+    # if verbose:
+    #    print(f"Classic dDLR: {dDLR}")
 
     return dDLR
 
@@ -469,11 +469,10 @@ def get_possible_hosts(
 
     # Get the indices of the possible hosts and return them and their dDLR
     possible_hosts = np.where(dDLR < dDLR_cut)[0]
-    if verbose:
-        print(f"Possible hosts: {possible_hosts}")
+
     if len(possible_hosts) == 0:
-        if verbose:
-            print("No possible hosts")
+        # if verbose:
+        #    print("No possible hosts")
         return possible_hosts, -999
     else:
         return possible_hosts, dDLR[possible_hosts]
@@ -518,9 +517,18 @@ def get_possible_hosts_loop(
     # Create an empty list to append the DataFrames of the possible hosts
     data = []
 
-    # Ensure directories exist
-    os.makedirs(f"output_files/{catalogue}/2arcmin_regions/", exist_ok=True)
-    os.makedirs(f"output_files/{catalogue}/possible_hosts", exist_ok=True)
+    # Check and create directories
+    dirs = [
+        f"output_files/{catalogue}/2arcmin_regions/",
+        f"output_files/{catalogue}/possible_hosts/",
+    ]
+
+    for dir_path in dirs:
+        if not os.path.exists(dir_path):  # Check if the directory does not exist
+            os.makedirs(dir_path, exist_ok=True)
+            print(f"Output directories created: {dir_path}")
+        else:
+            print(f"Output directories already exists: {dir_path}")
 
     # The path of the files with the regions of the supernovae
     ident = [f"output_files/{catalogue}/2arcmin_regions/{sn}" for sn in id_sn]
