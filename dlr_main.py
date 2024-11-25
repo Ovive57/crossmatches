@@ -1,6 +1,5 @@
 # from dlr_process_clean import get_possible_hosts_loop
-import dlr_process_clean as dlrp
-from dlr_plots_clean import *
+import dlr_functions as fnc
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -80,7 +79,7 @@ if __name__ == "__main__":
     dec_sn = ind_sn["declination"].values
     id_sn = ind_sn["name"].values
 
-    possible_host_gama = dlrp.get_possible_hosts_loop(
+    possible_host_gama = fnc.get_possible_hosts_loop(
         filename_GAMA,
         outfilename,
         id_sn,
@@ -94,7 +93,7 @@ if __name__ == "__main__":
         overwrite=True,
     )
 
-    possible_host_legacy = dlrp.get_possible_hosts_loop(
+    possible_host_legacy = fnc.get_possible_hosts_loop(
         None,
         outfilename,
         id_sn,
