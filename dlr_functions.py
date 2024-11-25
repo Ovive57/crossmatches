@@ -1,12 +1,6 @@
-# Legacy survey images
-import urllib
-from PIL import Image
-import requests
-
 # Basic imports
 import numpy as np
 import pandas as pd
-import random
 import os
 import sys
 
@@ -14,7 +8,6 @@ import sys
 # Astropy
 from astropy.table import Table
 from astropy import coordinates as co, units as u
-from astropy.io import fits
 import warnings
 
 # Suppress warnings from Astropy

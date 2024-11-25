@@ -1,5 +1,7 @@
 # from dlr_process_clean import get_possible_hosts_loop
 import dlr_functions as fnc
+
+# Importing libraries
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -15,29 +17,12 @@ import random
 import time
 
 
-# Plots
-from matplotlib import pyplot as plt
-from matplotlib.patches import Ellipse
-import matplotlib.image as mpimg
-import matplotlib.colors as mcolors
-
-# Astropy
-from astropy.table import Table
-from astropy import coordinates as co, units as u
-from astropy.io import fits
-
-# Legacy Survey catalogs
-import pyvo
-
-# Legacy survey images
-import urllib
-from PIL import Image
-import requests
-
 # Debugging
 import ipdb  # *ipdb.set_trace()
 
-filename_GAMA = "data_files/gkvScienceCatv02.fits"
+# To test GAMA too uncomment this :
+# filename_GAMA = "data_files/gkvScienceCatv02.fits"
+
 SN_df = pd.read_csv("data_files/tns_SNIa_20240424_copy.csv")
 
 outfilename = "test_script.csv"
@@ -77,19 +62,20 @@ if __name__ == "__main__":
     dec_sn = ind_sn["declination"].values
     id_sn = ind_sn["name"].values
 
-    possible_host_gama = fnc.get_possible_hosts_loop(
-        filename_GAMA,
-        outfilename,
-        id_sn,
-        ra_sn,
-        dec_sn,
-        catalogue="GAMA",
-        radius_deg=1 / 60,
-        dDLR_cut=4,
-        type_dlr="classic",
-        verbose=False,
-        overwrite=True,
-    )
+    ###### If you want to test GAMA too, follow the README steps and uncomment this part: ########
+    # possible_host_gama = fnc.get_possible_hosts_loop(
+    #    filename_GAMA,
+    #    outfilename,
+    #    id_sn,
+    #    ra_sn,
+    #    dec_sn,
+    #    catalogue="GAMA",
+    #    radius_deg=1 / 60,
+    #    dDLR_cut=4,
+    #    type_dlr="classic",
+    #    verbose=False,
+    #    overwrite=True,
+    # )
 
     possible_host_legacy = fnc.get_possible_hosts_loop(
         None,
@@ -104,23 +90,3 @@ if __name__ == "__main__":
         verbose=False,
         overwrite=True,
     )
-
-
-"""
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(description="SNN trained models performance")
-
-    parser.add_argument(
-        "--path_models26X",
-        default="./../snndump_26XBOOSTEDDES",
-        type=str,
-        help="Path to SNN models trained with 26 realisations of DES 5-year",
-    )
-
-parser.add_argument(
-        "--testing", action="store_true", help="run test suit only",
-    )
-if args.testing:
-    ids = ....
-"""
