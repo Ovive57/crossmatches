@@ -11,6 +11,8 @@ import sys
 
 # Astropy imports
 from astropy.table import Table
+from astropy.cosmology import Planck18 as cosmo
+import astropy.units as u
 import pandas as pd
 import astropy.coordinates as co
 
@@ -36,9 +38,11 @@ def draw_ellipses(
     position_angle,
     ax,
     catalogue,
-    scale_factor=[1, 4],
+    radius_deg=0.5 / 60,
+    scale_factor=[0, 4],
     rot_type="anticlockwise",
     colours=["red", "blue"],
+    linestyle="-",
     dDLR_bar=False,
     label=None,
 ):
@@ -77,6 +81,9 @@ def draw_ellipses(
         position_angle_arr = np.array(position_angle) - np.pi / 2
     else:
         position_angle_arr = np.array(position_angle)
+
+    cosz_sn = np.cos(np.radians(dec_sn))
+
     ra_gal_arr = np.array(ra_gal)
     dec_gal_arr = np.array(dec_gal)
 
@@ -94,7 +101,7 @@ def draw_ellipses(
     dDLR = fnc.get_dDLR_classic(
         ra_gal,
         dec_gal,
-        position_angle,
+        position_angle_arr,
         major_axis,
         minor_axis,
         ra_sn,
@@ -110,6 +117,8 @@ def draw_ellipses(
 
     x_2 = r_2 * np.cos(xi_rad)
     y_2 = r_2 * np.sin(xi_rad)
+
+    # Adjust the position to avoid distortion on the north:
 
     x1_rotated, y1_rotated = fnc.rotation(
         x_1, y_1, position_angle_arr, rot_type=rot_type
@@ -139,12 +148,13 @@ def draw_ellipses(
         # Normalize dDLR for the colormap with range [0, 4]
         norm = plt.Normalize(vmin=0, vmax=4)
         cmap = cm.ScalarMappable(norm=norm, cmap="rainbow")
+
         [
             ax.plot(
                 x2_rotated[i],
                 y2_rotated[i],
                 color=cmap.to_rgba(dDLR.iloc[i]),
-                linestyle="--",
+                linestyle=linestyle,
                 label=label,
                 zorder=100,
             )
@@ -159,7 +169,7 @@ def draw_ellipses(
                 x1_rotated[i],
                 y1_rotated[i],
                 color=colours[0],
-                linestyle="-",
+                linestyle=linestyle,
                 label=label,
                 zorder=100,
             )
@@ -170,7 +180,7 @@ def draw_ellipses(
                 x2_rotated[i],
                 y2_rotated[i],
                 color=colours[1],
-                linestyle="--",
+                linestyle=linestyle,
                 label=label,
                 zorder=100,
             )
@@ -226,7 +236,8 @@ def loop_ellipses_with_image(
     ra_sn,
     dec_sn,
     catalogue,
-    radius_deg,
+    z_sn=None,
+    radius_deg=None,
     rectangle=False,
     rect_width=15.3 / 3600,
     scale_factor=[1, 4],
@@ -235,20 +246,33 @@ def loop_ellipses_with_image(
     rot_type="anticlockwise",
     filename_GAMA=None,
     filename_legacy=None,
+    after_cuts=False,
     save=False,
     overwrite=False,
     out_dir=None,
+    ax=None,
 ):
 
     if catalogue == "GAMA":
-        galaxies_table_GAMA = Table.read(filename_GAMA)
-        galaxies_GAMA_df = galaxies_table_GAMA.to_pandas()
+        if filename_GAMA != None:
+            galaxies_table_GAMA = Table.read(filename_GAMA)
+            galaxies_GAMA_df = galaxies_table_GAMA.to_pandas()
     elif catalogue == "lsdr10":
         if filename_legacy != None:
             galaxies_table_legacy = Table.read(filename_legacy)
             galaxies_legacy_df_all = galaxies_table_legacy.to_pandas()
 
     for i, sn_name in enumerate(id_sn):
+        # Adjust radius_deg based on z_sn for each supernova
+        if radius_deg == None:
+            if z_sn == None:
+                radius_deg = 0.5 / 60
+            else:
+                if z_sn[i] < 0.01:
+                    radius_deg = 1 / 60
+                else:
+                    radius_deg = 0.5 / 60
+
         fig_path = (
             f"{out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
         )
@@ -268,26 +292,47 @@ def loop_ellipses_with_image(
         )
 
         if catalogue == "GAMA":
-            region_GAMA_table = fnc.table_GAMA_galaxies_within_radius(
-                id_sn[i],
-                ra_sn[i],
-                dec_sn[i],
-                galaxies_GAMA_df,
-                radius_deg=radius_deg,
-                save=False,
-                overwrite=False,
-                verbose=True,
-            )
+            if filename_GAMA == None:
+                region_GAMA_table = fnc.table_GAMA_galaxies_within_radius(
+                    id_sn[i],
+                    ra_sn[i],
+                    dec_sn[i],
+                    galaxies_GAMA_df,
+                    radius_deg=radius_deg,
+                    save=False,
+                    overwrite=False,
+                    verbose=True,
+                )
+                galaxies_GAMA_region_df = region_GAMA_table.to_pandas()
+            else:
+                galaxies_GAMA_region_df = galaxies_GAMA_df[
+                    (galaxies_GAMA_df["sn_name"] == sn_name)
+                ]
 
-            galaxies_GAMA_region_df = region_GAMA_table.to_pandas()
-            ra_gal = galaxies_GAMA_region_df["RAcen"]
-            dec_gal = galaxies_GAMA_region_df["Deccen"]
+            if after_cuts:
+                GAMA_region_aftercuts_df = galaxies_GAMA_region_df[
+                    (galaxies_GAMA_region_df["cut_match"] == "False")
+                    & (galaxies_GAMA_region_df["dDLR"] > 0)
+                ]
+                ra_gal = GAMA_region_aftercuts_df["RAcen"]
+                dec_gal = GAMA_region_aftercuts_df["Deccen"]
 
-            axrat = galaxies_GAMA_region_df["axrat"]
+                axrat = GAMA_region_aftercuts_df["axrat"]
 
-            major_axis = galaxies_GAMA_region_df["R50"]  # In arcsec
-            minor_axis = major_axis * axrat
-            position_angle = galaxies_GAMA_region_df["ang"]
+                major_axis = GAMA_region_aftercuts_df["R50"]
+                minor_axis = major_axis * axrat
+                position_angle = GAMA_region_aftercuts_df["ang"]
+            else:
+                ra_gal = galaxies_GAMA_region_df["RAcen"]
+                dec_gal = galaxies_GAMA_region_df["Deccen"]
+
+                axrat = galaxies_GAMA_region_df["axrat"]
+
+                major_axis = galaxies_GAMA_region_df["R50"]  # In arcsec
+                minor_axis = major_axis * axrat
+                position_angle = galaxies_GAMA_region_df["ang"]
+
+                cut_match = galaxies_GAMA_region_df["cut_match"]
 
         elif catalogue == "lsdr10":
             if filename_legacy == None:
@@ -306,77 +351,282 @@ def loop_ellipses_with_image(
                 galaxies_legacy_df = galaxies_legacy_df_all[
                     galaxies_legacy_df_all["sn_name"] == sn_name
                 ]
+            if after_cuts:
+                galaxies_legacy_aftercut_df = galaxies_legacy_df[
+                    (galaxies_legacy_df["cut_match_photo"] == "False")
+                    & (galaxies_legacy_df["cut_match_fracflux"] == "False")
+                    & (galaxies_legacy_df["dDLR"] > 0)
+                ]
 
-            ra_gal = galaxies_legacy_df["ra"]
-            dec_gal = galaxies_legacy_df["dec"]
+                ra_gal = galaxies_legacy_aftercut_df["ra"]
+                dec_gal = galaxies_legacy_aftercut_df["dec"]
 
-            shape_r = galaxies_legacy_df["shape_r"]
-            shape_e1 = galaxies_legacy_df["shape_e1"]
-            shape_e2 = galaxies_legacy_df["shape_e2"]
-            ellipticity = np.sqrt(shape_e1**2 + shape_e2**2)
-            axrat = (1 - ellipticity) / (1 + ellipticity)
+                shape_r = galaxies_legacy_aftercut_df["shape_r"]
+                shape_e1 = galaxies_legacy_aftercut_df["shape_e1"]
+                shape_e2 = galaxies_legacy_aftercut_df["shape_e2"]
+                ellipticity = np.sqrt(shape_e1**2 + shape_e2**2)
+                axrat = (1 - ellipticity) / (1 + ellipticity)
 
-            major_axis = shape_r
-            minor_axis = major_axis * axrat
-            position_angle = 0.5 * np.arctan2(shape_e2, shape_e1)
+                major_axis = shape_r
+                minor_axis = major_axis * axrat
+                position_angle = 0.5 * np.arctan2(shape_e2, shape_e1)
+            else:
+
+                ra_gal = galaxies_legacy_df["ra"]
+                dec_gal = galaxies_legacy_df["dec"]
+
+                shape_r = galaxies_legacy_df["shape_r"]
+                shape_e1 = galaxies_legacy_df["shape_e1"]
+                shape_e2 = galaxies_legacy_df["shape_e2"]
+                ellipticity = np.sqrt(shape_e1**2 + shape_e2**2)
+                axrat = (1 - ellipticity) / (1 + ellipticity)
+
+                major_axis = shape_r
+                minor_axis = major_axis * axrat
+                position_angle = 0.5 * np.arctan2(shape_e2, shape_e1)
 
         else:
             print("Catalogue not recognised, please use 'GAMA' or 'lsdr10'")
             sys.exit()
-        if len(ra_gal) == 1 and ra_gal.iloc[0] == -999.0:
-            print(f"No legacy image downloaded")
-        else:
-            plot_jpeg_cutout(
-                id_sn[i],
-                ra_sn[i],
-                dec_sn[i],
-                radius_deg,
-                ax,
-            )
-
-            draw_ellipses(
-                ra_gal,
-                dec_gal,
-                ra_sn[i],
-                dec_sn[i],
-                major_axis,
-                minor_axis,
-                position_angle,
-                ax,
-                catalogue,
-                scale_factor=scale_factor,
-                rot_type=rot_type,
-                colours=colours,
-                dDLR_bar=dDLR_bar,
-                label=None,
-            )
-            if rectangle:
-                # Draw rectangle boundaries
-                # Vertical lines (left and right for the rectangle width)
-                ax.axvline(x=ra_sn[i] - rect_width / 2, color="red", linestyle="--")
-                ax.axvline(x=ra_sn[i] + rect_width / 2, color="red", linestyle="--")
-
-                # Horizontal lines (top and bottom for the rectangle height)
-                ax.axhline(y=dec_sn[i] - rect_width / 2, color="blue", linestyle="--")
-                ax.axhline(y=dec_sn[i] + rect_width / 2, color="blue", linestyle="--")
-            plt.legend()
-
-        if save:
-            if len(ra_gal) == 1 and ra_gal.iloc[0] == -999.0:
-                print("Not saving plot, no host galaxy found")
+        if after_cuts:
+            if len(ra_gal) == 0:  # and ra_gal.iloc[0] == -999.0:
+                print(f"No legacy image downloaded for {id_sn[i]}")
             else:
-                if out_dir is None:
-                    out_dir = "plots/"
-                Path(out_dir).mkdir(parents=True, exist_ok=True)
-                plt.savefig(
-                    f"{out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
+
+                plot_jpeg_cutout(
+                    id_sn[i],
+                    ra_sn[i],
+                    dec_sn[i],
+                    radius_deg,
+                    ax,
                 )
-                print(
-                    f"Saving plot to {out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
+
+                draw_ellipses(
+                    ra_gal,
+                    dec_gal,
+                    ra_sn[i],
+                    dec_sn[i],
+                    major_axis,
+                    minor_axis,
+                    position_angle,
+                    ax,
+                    catalogue,
+                    radius_deg=radius_deg,
+                    scale_factor=scale_factor,
+                    rot_type=rot_type,
+                    colours=colours,
+                    dDLR_bar=dDLR_bar,
+                    label=None,
                 )
+
+                if rectangle:
+                    # Draw rectangle boundaries
+                    # Vertical lines (left and right for the rectangle width)
+                    ax.axvline(x=ra_sn[i] - rect_width / 2, color="red", linestyle="--")
+                    ax.axvline(x=ra_sn[i] + rect_width / 2, color="red", linestyle="--")
+
+                    # Horizontal lines (top and bottom for the rectangle height)
+                    ax.axhline(
+                        y=dec_sn[i] - rect_width / 2, color="blue", linestyle="--"
+                    )
+                    ax.axhline(
+                        y=dec_sn[i] + rect_width / 2, color="blue", linestyle="--"
+                    )
+                plt.legend()
+        else:
+            if len(ra_gal) == 1 and ra_gal.iloc[0] == -999.0:
+                print(f"No galaxy in the region for {id_sn[i]}")
+            else:
+
+                plot_jpeg_cutout(
+                    id_sn[i],
+                    ra_sn[i],
+                    dec_sn[i],
+                    radius_deg,
+                    ax,
+                )
+
+                if catalogue == "GAMA":
+                    GAMA_region_aftercuts_df = galaxies_GAMA_region_df[
+                        (galaxies_GAMA_region_df["cut_match"] == "False")
+                        & (galaxies_GAMA_region_df["dDLR"] > 0)
+                    ]
+                    ra_gal = GAMA_region_aftercuts_df["RAcen"]
+                    dec_gal = GAMA_region_aftercuts_df["Deccen"]
+
+                    axrat = GAMA_region_aftercuts_df["axrat"]
+
+                    major_axis = GAMA_region_aftercuts_df["R50"]
+                    minor_axis = major_axis * axrat
+                    position_angle = GAMA_region_aftercuts_df["ang"]
+
+                    draw_ellipses(
+                        ra_gal,
+                        dec_gal,
+                        ra_sn[i],
+                        dec_sn[i],
+                        major_axis,
+                        minor_axis,
+                        position_angle,
+                        ax,
+                        catalogue,
+                        radius_deg=radius_deg,
+                        scale_factor=scale_factor,
+                        rot_type=rot_type,
+                        colours=colours,
+                        dDLR_bar=dDLR_bar,
+                        label=None,
+                    )
+
+                    galaxies_GAMA_cuts_df = galaxies_GAMA_df[
+                        (galaxies_GAMA_df["dDLR"] > 0)
+                        & ((galaxies_GAMA_df["cut_match"] == "True"))
+                    ]
+                    ra_gal_cuts = galaxies_GAMA_cuts_df["RAcen"]
+                    dec_gal_cuts = galaxies_GAMA_cuts_df["Deccen"]
+                    axrat_cuts = galaxies_GAMA_cuts_df["axrat"]
+                    major_axis_cuts = galaxies_GAMA_cuts_df["R50"]
+                    minor_axis_cuts = major_axis_cuts * axrat_cuts
+                    position_angle_cuts = galaxies_GAMA_cuts_df["ang"]
+                    draw_ellipses(
+                        ra_gal_cuts,
+                        dec_gal_cuts,
+                        ra_sn[i],
+                        dec_sn[i],
+                        major_axis_cuts,
+                        minor_axis_cuts,
+                        position_angle_cuts,
+                        ax,
+                        catalogue,
+                        radius_deg=radius_deg,
+                        scale_factor=scale_factor,
+                        rot_type=rot_type,
+                        colours=["red", "red"],
+                        linestyle=(0, (1, 1)),
+                        dDLR_bar=False,
+                        label=None,
+                    )
+                if catalogue == "lsdr10":
+                    galaxies_legacy_aftercut_df = galaxies_legacy_df[
+                        (galaxies_legacy_df["cut_match_photo"] == "False")
+                        & (galaxies_legacy_df["cut_match_fracflux"] == "False")
+                        & (galaxies_legacy_df["dDLR"] > 0)
+                    ]
+
+                    ra_gal = galaxies_legacy_aftercut_df["ra"]
+                    dec_gal = galaxies_legacy_aftercut_df["dec"]
+
+                    shape_r = galaxies_legacy_aftercut_df["shape_r"]
+                    shape_e1 = galaxies_legacy_aftercut_df["shape_e1"]
+                    shape_e2 = galaxies_legacy_aftercut_df["shape_e2"]
+                    ellipticity = np.sqrt(shape_e1**2 + shape_e2**2)
+                    axrat = (1 - ellipticity) / (1 + ellipticity)
+
+                    major_axis = shape_r
+                    minor_axis = major_axis * axrat
+                    position_angle = 0.5 * np.arctan2(shape_e2, shape_e1)
+
+                    draw_ellipses(
+                        ra_gal,
+                        dec_gal,
+                        ra_sn[i],
+                        dec_sn[i],
+                        major_axis,
+                        minor_axis,
+                        position_angle,
+                        ax,
+                        catalogue,
+                        radius_deg=radius_deg,
+                        scale_factor=scale_factor,
+                        rot_type=rot_type,
+                        colours=colours,
+                        dDLR_bar=dDLR_bar,
+                        label=None,
+                    )
+
+                    galaxies_legacy_cuts_df = galaxies_legacy_df[
+                        (galaxies_legacy_df["dDLR"] > 0)
+                        & (
+                            (galaxies_legacy_df["cut_match_photo"] == "True")
+                            | (galaxies_legacy_df["cut_match_fracflux"] == "True")
+                        )
+                    ]
+                    ra_gal_cuts = galaxies_legacy_cuts_df["ra"]
+                    dec_gal_cuts = galaxies_legacy_cuts_df["dec"]
+                    shape_r_cuts = galaxies_legacy_cuts_df["shape_r"]
+                    shape_e1_cuts = galaxies_legacy_cuts_df["shape_e1"]
+                    shape_e2_cuts = galaxies_legacy_cuts_df["shape_e2"]
+                    ellipticity_cuts = np.sqrt(shape_e1_cuts**2 + shape_e2_cuts**2)
+                    axrat_cuts = (1 - ellipticity_cuts) / (1 + ellipticity_cuts)
+                    major_axis_cuts = shape_r_cuts
+                    minor_axis_cuts = major_axis_cuts * axrat_cuts
+                    position_angle_cuts = 0.5 * np.arctan2(shape_e2_cuts, shape_e1_cuts)
+
+                    draw_ellipses(
+                        ra_gal_cuts,
+                        dec_gal_cuts,
+                        ra_sn[i],
+                        dec_sn[i],
+                        major_axis_cuts,
+                        minor_axis_cuts,
+                        position_angle_cuts,
+                        ax,
+                        catalogue,
+                        radius_deg=radius_deg,
+                        scale_factor=scale_factor,
+                        rot_type=rot_type,
+                        colours=["red", "red"],
+                        linestyle=(0, (1, 1)),
+                        dDLR_bar=False,
+                        label=None,
+                    )
+
+                if rectangle:
+                    # Draw rectangle boundaries
+                    # Vertical lines (left and right for the rectangle width)
+                    ax.axvline(x=ra_sn[i] - rect_width / 2, color="red", linestyle="--")
+                    ax.axvline(x=ra_sn[i] + rect_width / 2, color="red", linestyle="--")
+
+                    # Horizontal lines (top and bottom for the rectangle height)
+                    ax.axhline(
+                        y=dec_sn[i] - rect_width / 2, color="blue", linestyle="--"
+                    )
+                    ax.axhline(
+                        y=dec_sn[i] + rect_width / 2, color="blue", linestyle="--"
+                    )
+                plt.legend()
+        if save:
+            if after_cuts:
+                if len(ra_gal) == 0:  # and ra_gal.iloc[0] == -999.0:
+                    print("Not saving plot, no host galaxy found")
+                else:
+                    if out_dir is None:
+                        out_dir = "plots/"
+                    Path(out_dir).mkdir(parents=True, exist_ok=True)
+                    plt.savefig(
+                        f"{out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
+                    )
+                    print(
+                        f"Saving plot to {out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
+                    )
+            else:
+                if len(ra_gal) == 1 and ra_gal.iloc[0] == -999.0:
+                    print("Not saving plot, no galaxies in the region")
+                else:
+                    if out_dir is None:
+                        out_dir = "plots/"
+                    Path(out_dir).mkdir(parents=True, exist_ok=True)
+                    plt.savefig(
+                        f"{out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
+                    )
+                    print(
+                        f"Saving plot to {out_dir}/{id_sn[i]}_{catalogue}_ellipses_{radius_deg*60}arcmin.jpeg"
+                    )
+            plt.close()
         else:
             plt.show()
-        plt.close()
+            plt.close()
+
     return ax
 
 
@@ -495,6 +745,7 @@ def plot_host(id_sn, catalogue, radius_deg, filename=None, save=False, out_dir=N
                 position_angle,
                 ax,
                 catalogue,
+                radius_deg=radius_deg,
                 scale_factor=[1, 4],
                 rot_type="anticlockwise",
                 colours=["red", "blue"],
@@ -515,8 +766,9 @@ def plot_host(id_sn, catalogue, radius_deg, filename=None, save=False, out_dir=N
         # )
 
 
-def redshift_dif(filename_sn, filename_gal, catalogue):
+def redshift_dif(filename_sn, filename_gal, catalogue, ztype="spec"):
     sn_df = pd.read_csv(filename_sn)
+    z_sn = sn_df["redshift"]
 
     if filename_gal.endswith(".fits"):
         gal_df = Table.read(filename_gal).to_pandas()
@@ -524,39 +776,143 @@ def redshift_dif(filename_sn, filename_gal, catalogue):
         gal_df = pd.read_csv(filename_gal)
 
     if catalogue == "GAMA":
-        z_sn = sn_df["redshift"]
+        gal_df = gal_df[gal_df["Z"] > 0]
         z_gal = gal_df["Z"]
         host = gal_df["top_match_ac"] == True
+        z_gal = z_gal[host]
+        id_sn = gal_df["sn_name"][host]
+        z_sn = z_sn[sn_df["name"].isin(id_sn)]
+    elif catalogue == "lsdr10":
+        if ztype == "spec":
+            gal_df = gal_df[gal_df["z_spec"] > 0]
+            host = gal_df["top_match_ac"] == True
+            z_gal = gal_df["z_spec"]
+
+        elif ztype == "photo":
+            gal_df = gal_df[gal_df["z_phot_mean"] > 0]
+            host = gal_df["top_match_ac"] == True
+            z_gal = gal_df["z_phot_mean"]
+            z_err = gal_df["z_phot_std"]
+            z_err = z_err[host]
+
+        else:
+            print(
+                "Legacy survey catalogues need to specify the redshift type, either 'spec' or 'photo'"
+            )
+            sys.exit()
         z_gal = z_gal[host]
         id_sn = gal_df["sn_name"][host]
         z_sn = z_sn[sn_df["name"].isin(id_sn)]
 
     else:
         print(
-            "Catalogue not recognised, please use 'GAMA'. If you used 'lsdr10, please note that legacy survey catalogues doesn't provide redshifts"
+            "Catalogue not recognised, please use 'GAMA' or 'lsdr10' for the catalogue"
         )
+        sys.exit()
 
     fig1, ax1 = plt.subplots()
     ax1.scatter(z_sn, z_gal, color="blue")
-    ax1.set_title("Redshift of galaxies vs redshift of SN")
-    ax1.set(xlabel=("Redshift of SN"), ylabel=("Redshift of galaxy"))
+    # Get the min and max values of both z_sn and z_gal
+    # min_val = min(min(z_sn), min(z_gal))
+    # max_val = max(max(z_sn), max(z_gal))
+
+    # # Set both axes to have the same range
+    # ax1.set_xlim(min_val, max_val)
+    # ax1.set_ylim(min_val, max_val)
+
+    ax1.set_title(f"{ztype} redshift of {catalogue} galaxies vs redshift of SN")
+    ax1.set(xlabel=("Redshift of SN"), ylabel=(f"{ztype} redshift of galaxy"))
 
     dif_z = np.abs(np.array(z_sn) - np.array(z_gal))
+    # for i, dif in enumerate(dif_z):
+    #     if dif > 0.01:
+    #         print(
+    #             f"for {id_sn.iloc[i]} the redshift difference is {dif}. With Sn redshift {z_sn.iloc[i]} and galaxy redshift {z_gal.iloc[i]}"
+    #         )
+    if ztype == "photo":
+        zSNR_gal = z_gal / z_err
+        z_err_SN = 0.01 * np.ones(len(z_sn))
+        zSNR_SN = z_sn / z_err_SN
+        fig5, ax5 = plt.subplots()
+        ax5.scatter(z_gal, zSNR_gal, color="red", label="SNR of photo-z")
+        ax5.set_title("SNR of photo-z vs photo-z of galaxy")
+        ax5.set(xlabel=("Photo-z of galaxy"), ylabel=("SNR of photo-z"))
+        plt.legend()
+    elif ztype == "spec":
+        z_err_gal = 0.001 * np.ones(len(z_gal))
+        zSNR_gal = z_gal / z_err_gal
+        z_err_SN = 0.01 * np.ones(len(z_sn))
+        zSNR_SN = z_sn / z_err_SN
+        fig5, ax5 = plt.subplots()
+        ax5.scatter(zSNR_SN, zSNR_gal, color="red")
+        ax5.set_title("SNR of the galaxy redshift vs SNR of the SN redshift")
+        ax5.set(xlabel=("SNR of z of SN"), ylabel=("SNR of spec-z of galaxy"))
+        plt.legend()
+
+    zSNR_gal_array = np.asarray(zSNR_gal)
+    zSNR_SN_array = np.asarray(zSNR_SN)
+    dif_z_array = np.asarray(dif_z)
+
+    mask = (zSNR_gal_array > 5) & (zSNR_SN_array > 5)
+    z_gal_selected = z_gal[mask]
+    dif_z_selected = dif_z_array[mask]
+
+    fig6, ax6 = plt.subplots()
+    ax6.scatter(z_gal, dif_z, color="red")
+    ax6.scatter(z_gal_selected, dif_z_selected, color="green", label="SNR > 5")
+
+    ax6.set_title(f"Redshift difference vs {ztype} redshift of galaxy")
+    ax6.set(xlabel=(f"{ztype} redshift of galaxy"), ylabel=("Redshift difference"))
+    plt.legend()
+    fig7, ax7 = plt.subplots()
+    ax7.scatter(z_gal, zSNR_gal, color="red")
+    ax7.set_title(f"SNR of {ztype} redshift of galaxy vs {ztype} redshift of galaxy")
+    ax7.set(xlabel=(f"{ztype} redshift of galaxy"), ylabel=("SNR of redshift"))
+
     fig2, ax2 = plt.subplots()
     ax2.scatter(
         z_gal, dif_z, color="red"
     )  #! interesting? See if the difference is correlated with the redshift of the galaxy
-    ax2.set_title("Redshift difference vs redshift of galaxy")
-    ax2.set(xlabel=("Redshift of galaxy"), ylabel=("Redshift difference"))
+    ax2.set_title(f"Redshift difference vs {ztype} redshift of galaxy")
+    ax2.set(xlabel=(f"{ztype} redshift of galaxy"), ylabel=("Redshift difference"))
+    for_mean_dif = np.where(dif_z > 0)
+    mean = np.mean(np.array(dif_z[for_mean_dif]))
+    median = np.median(np.array(dif_z[for_mean_dif]))
+    std_dev = np.std(np.array(dif_z[for_mean_dif]))
 
-    mean = np.mean(dif_z)
-    median = np.median(dif_z)
-    std_dev = np.std(dif_z)
     fig3, ax3 = plt.subplots()
     ind = np.where(np.abs(dif_z) < 1)
-    ax3.hist(dif_z, bins=100)
+    ax3.hist(dif_z, bins=10)
+    # ax3.set_xscale("log")
     plt.legend([f"Mean: {mean:9f}\nMedian: {median:9f}\nStd Dev: {std_dev:9f}"])
     ax3.set_title("Histogram of redshift differences")
     ax3.set(xlabel=("Redshift difference"), ylabel=("Counts"))
+
+    dist_sn = cosmo.comoving_distance(z_sn).to(u.kpc)
+    dist_gal = cosmo.comoving_distance(z_gal).to(u.kpc)
+
+    distance_between = abs(dist_gal - dist_sn)
+    fig4, ax4 = plt.subplots()
+    ax4.scatter(z_gal, distance_between, color="red", label="Distance > 50 kpc")
+    ind = np.where(distance_between < 50 * u.kpc)
+    print(f"Number of Galaxies with {ztype} redshift: {len(z_gal)}")
+    print(f"Number of galaxies with distance < 50 kpc: {len(ind[0])}")
+    ind_more = np.where(distance_between > 300000 * u.kpc)
+    id_sn_more = id_sn.iloc[ind_more[0]]
+    print(f"Number of galaxies with distance > 300000 kpc: {len(ind_more[0])}")
+    print(f"The SN with distance > 300000 kpc are: {id_sn_more}")
+
+    ax4.scatter(
+        z_gal.iloc[ind[0]],
+        distance_between[ind[0]],
+        color="green",
+        label="Distance < 50 kpc",
+    )
+    ax4.set_title("Distance between SN and galaxy vs redshift of galaxy")
+    ax4.set(
+        xlabel=("Redshift of galaxy"), ylabel=("Distance between SN and galaxy (kpc)")
+    )
+
+    plt.legend()
 
     plt.show()

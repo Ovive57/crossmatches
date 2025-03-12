@@ -78,6 +78,27 @@ def get_limits_region(ra, dec, radius_deg=1 / 60):
         ra_min, ra_max, dec_min, dec_max (float64): limits of the region
     """
     # start = time.time()
+    cos_sn = 1  # np.cos(np.radians(dec))
+    ra_min = ra - radius_deg / cos_sn
+    ra_max = ra + radius_deg / cos_sn
+    dec_min = dec - radius_deg
+    dec_max = dec + radius_deg
+    # end = time.time()
+    # print(f"\nTime GET_LIMITS_REGION function: {end-start} s\n")
+    return ra_min, ra_max, dec_min, dec_max
+
+
+def get_limits_region_with_cos(ra, dec, radius_deg=1 / 60):
+    """Get the limits of the region around a center point
+
+    Args:
+        ra (float64): ra of the galaxy
+        dec (float64): dec of the galaxy
+        radius_deg (float64): radius of the region in degrees
+    Returns:
+        ra_min, ra_max, dec_min, dec_max (float64): limits of the region
+    """
+    # start = time.time()
     cos_sn = np.cos(np.radians(dec))
     ra_min = ra - radius_deg / cos_sn
     ra_max = ra + radius_deg / cos_sn
@@ -530,6 +551,17 @@ def get_possible_hosts(
     possible_hosts = np.where(dDLR < dDLR_cut)[0]
 
     if len(possible_hosts) == 0:
+        #! If I want to keep track of the SN that doesn't have a galaxy with dDLR<4 but have a closest galaxy in the region
+        # if len(dDLR) == 0:
+        #     # print("No galaxies in the region")
+        #     return possible_hosts, -999
+        # else:
+        #     print(dDLR)
+        #     closest_galaxy = np.argmin(dDLR)
+        #     print(closest_galaxy, dDLR[closest_galaxy])
+        #     return [closest_galaxy], dDLR[closest_galaxy]
+        # return closest_galaxy, dDLR[closest_galaxy]
+        #! #########################################################
         # if verbose:
         #    print("No possible hosts")
         # end = time.time()
@@ -662,7 +694,8 @@ def get_possible_hosts_loop(
                 overwrite=False,
                 verbose=verbose,
             )
-            table_gal_df = table_gal.to_pandas()
+            table_df = table_gal.to_pandas()
+            table_gal_df = table_df[table_df["duplicate"] == 0]
             ra_gal = np.asarray(table_gal_df["RAcen"])
             dec_gal = np.asarray(table_gal_df["Deccen"])
             major_gal = np.asarray(table_gal_df["R50"])  # In arcsec
@@ -955,8 +988,12 @@ def get_galaxies_after_cuts(
 
         # Define fracflux_cols and apply the condition
         fracflux_cols = ["fracflux_g", "fracflux_i", "fracflux_r", "fracflux_z"]
+        # fracflux_not_cut = gal_df[fracflux_cols].apply(
+        #     lambda row: any((row > 0) & (row < 1)), axis=1
+        # )
+        #! I just changed this, I hope I don't regret it!!
         fracflux_not_cut = gal_df[fracflux_cols].apply(
-            lambda row: any((row > 0) & (row < 1)), axis=1
+            lambda row: any((row > 0) & (row < 1)) or all(row <= 0), axis=1
         )
 
         # Update cut_match_fracflux based on the condition

@@ -1,6 +1,7 @@
 # Importing libraries
 import argparse
 import pandas as pd
+import time
 
 
 # Debugging
@@ -19,9 +20,11 @@ SN_df = pd.read_csv("data_files/tns_SNIa_20240424_copy.csv")
 radius_deg = 0.5 / 60
 dDLR_cut = 4
 # outfilename = f"test_script_{int(radius_deg*2*60)}arcmin.csv"
-outfilename = "tns_SNIa_7041.csv"
+outfilename = "tns_SNIa_7041_classic_test_time.csv"
 # outfilename = "ZTF_SNIa_paperAn.csv"
 out_dir = "output_files/"
+type_dlr = "classic"
+overwrite = False
 
 if __name__ == "__main__":
 
@@ -30,6 +33,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--testing",
+        action="store_true",
+        help="run test suit only",
+    )
+    parser.add_argument(
+        "--rotated_dlr",
         action="store_true",
         help="run test suit only",
     )
@@ -53,10 +61,23 @@ if __name__ == "__main__":
             SN_df_testing["name"].isin(id_sn_test)
         ]  # Filter rows with .isin()
         outfilename = f"test_script_{int(radius_deg*2*60)}arcmin.csv"
+        overwrite = True
         ###### INPUTS ######
         ra_sn = ind_sn["ra"].values
         dec_sn = ind_sn["declination"].values
         id_sn = ind_sn["name"].values
+    elif args.rotated_dlr:
+
+        type_dlr = "rotated"
+        ind_sn = SN_df  # Use the full dataset
+
+        ###### INPUTS ###### #! Change the column names to match the ones in your dataset
+        ra_sn = ind_sn["ra"].values
+        dec_sn = ind_sn["declination"].values
+        id_sn = ind_sn["name"].values
+        outfilename = "tns_SNIa_7041_rotated_test_time.csv"
+        overwrite = False
+
     else:
         ind_sn = SN_df  # Use the full dataset
 
@@ -107,10 +128,10 @@ if __name__ == "__main__":
         out_dir=out_dir,
         radius_deg=radius_deg,
         dDLR_cut=dDLR_cut,
-        type_dlr="classic",
+        type_dlr=type_dlr,
         save=True,
         verbose=False,
-        overwrite=False,
+        overwrite=overwrite,
     )
 
     possible_host_legacy_after_cuts = fnc.get_galaxies_after_cuts(
@@ -123,8 +144,8 @@ if __name__ == "__main__":
         out_dir=out_dir,
         radius_deg=radius_deg,
         dDLR_cut=dDLR_cut,
-        type_dlr="classic",
+        type_dlr=type_dlr,
         save=True,
         verbose=False,
-        overwrite=False,
+        overwrite=overwrite,
     )
